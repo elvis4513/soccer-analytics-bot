@@ -54,7 +54,7 @@ def matches(update: Update, context):
 
 # --- Run the bot ---
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    from telegram.ext import Updater, CommandHandler, CallbackContext
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("matches", matches))
     app.run_polling()
