@@ -50,7 +50,7 @@ def matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
         away = match["teams"]["away"]["name"]
         date = match["fixture"]["date"]
         text += f"{home} vs {away} on {date}\n"
-     update.message.reply_text(text)
+        update.message.reply_text(text)
 
 # --- Run the bot ---
 if __name__ == "__main__":
