@@ -41,7 +41,7 @@ def start(update: Update, context: CallbackContext):
 def matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
     matches = get_upcoming_matches()
     if not matches:
-        await update.message.reply_text("No matches found.")
+          update.message.reply_text("No matches found.")
         return
 
     text = ""
@@ -50,7 +50,7 @@ def matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
         away = match["teams"]["away"]["name"]
         date = match["fixture"]["date"]
         text += f"{home} vs {away} on {date}\n"
-    await update.message.reply_text(text)
+     update.message.reply_text(text)
 
 # --- Run the bot ---
 if __name__ == "__main__":
