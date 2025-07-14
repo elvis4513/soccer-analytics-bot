@@ -33,8 +33,10 @@ def get_upcoming_matches(days=3):
     return matches
 
 # --- Command Handlers ---
-async def start(def startupdate: Update, context: CallbackContext):
-    await update.message.reply_text("⚽ Hello! I’m your Soccer Analytics Bot!")
+def start(update: Update, context: CallbackContext):
+
+  update.message.reply_text("⚽ Hello! I’m your Soccer Analytics Bot!")
+
 
 async def matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
     matches = get_upcoming_matches()
