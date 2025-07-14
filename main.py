@@ -1,91 +1,67 @@
 import os
-import asyncio
-import logging
 import requests
 import datetime
+import time
+import asyncio
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
-from fastapi import FastAPI
-import uvicorn
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# --- Setup logging ---
-logging.basicConfig(level=logging.INFO)
-
-# --- Load environment variables ---
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# --- Load from environment ---
 API_KEY = os.getenv("API_FOOTBALL_KEY")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 BASE_URL = "https://v3.football.api-sports.io"
-HEADERS = {"x-apisports-key": API_KEY}
+HEADERS = {
+    "x-apisports-key": API_KEY
+}
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# --- Telegram Bot Setup ---
-application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-# /start command
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    await update.message.reply_text(f"✅ Your chat ID is: {chat_id}")
-    logging.info(f"User started bot. Chat ID = {chat_id}")
-
-application.add_handler(CommandHandler("start", start))
-
-# --- Match Scanner ---
+# --- Util Function ---
 def get_upcoming_fixtures(days=3):
     today = datetime.datetime.now().date()
     upcoming_matches = []
 
     for i in range(days):
         date_str = str(today + datetime.timedelta(days=i))
-        logging.info(f"📅 Fetching fixtures for {date_str}...")
+        print(f"Fetching fixtures for {date_str}...")
         url = f"{BASE_URL}/fixtures?date={date_str}"
+        response = requests.get(url, headers=HEADERS)
 
-        try:
-            res = requests.get(url, headers=HEADERS)
-            data = res.json()
+        if response.status_code == 200:
+            data = response.json()
             matches = data.get("response", [])
-            upcoming_matches.extend(matches)
-        except Exception as e:
-            logging.error(f"❌ Error fetching fixtures for {date_str}: {e}")
+            for match in matches:
+                teams = match["teams"]
+                home = teams["home"]["name"]
+                away = teams["away"]["name"]
+                upcoming_matches.append(f"{home} vs {away} on {date_str}")
+        else:
+            print(f"Failed to fetch for {date_str}")
 
     return upcoming_matches
 
-async def scan_matches():
-    matches = get_upcoming_fixtures()
-    logging.info(f"✅ Found {len(matches)} upcoming matches.")
+# --- /start Command Handler ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    await update.message.reply_text(f"Hello! Your chat ID is: {chat_id}")
 
-    if TELEGRAM_CHAT_ID:
-        if matches:
-            send_telegram_message(f"📊 Found {len(matches)} matches to analyze.")
-        else:
-            send_telegram_message("⚠️ No strong matches found based on current criteria.")
+# --- /matches Command Handler ---
+async def matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Scanning upcoming matches...")
+    fixtures = get_upcoming_fixtures()
+    if fixtures:
+        reply = "\n".join(fixtures)
     else:
-        logging.warning("TELEGRAM_CHAT_ID not set yet.")
+        reply = "No strong matches found based on current criteria."
+    await update.message.reply_text(reply)
 
-def send_telegram_message(message):
-    if not TELEGRAM_CHAT_ID:
-        logging.warning("TELEGRAM_CHAT_ID missing.")
-        return
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-    try:
-        requests.post(url, json=payload)
-    except Exception as e:
-        logging.error(f"❌ Failed to send Telegram message: {e}")
-
-# --- Async startup ---
+# --- Main Bot Application ---
 async def main():
-    await application.start()
-    await application.updater.start_polling()
-    await scan_matches()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# --- Keep Render alive with FastAPI ---
-app = FastAPI()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("matches", matches))
 
-@app.get("/")
-async def root():
-    return {"message": "Soccer Analytics Bot is alive"}
+    print("Bot started.")
+    await app.run_polling()
 
 if __name__ == "__main__":
     asyncio.run(main())
-    uvicorn.run(app, host="0.0.0.0", port=10000)
