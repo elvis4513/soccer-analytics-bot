@@ -38,7 +38,7 @@ def start(update: Update, context: CallbackContext):
   update.message.reply_text("⚽ Hello! I’m your Soccer Analytics Bot!")
 
 
-def matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def matches(update: Update, context):
     matches = get_upcoming_matches()
     if not matches:
        update.message.reply_text("No matches found.")
