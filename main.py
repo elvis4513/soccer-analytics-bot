@@ -41,8 +41,8 @@ def start(update: Update, context: CallbackContext):
 def matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
     matches = get_upcoming_matches()
     if not matches:
-          update.message.reply_text("No matches found.")
-        return
+       update.message.reply_text("No matches found.")
+       return
 
     text = ""
     for match in matches[:5]:  # Limit to first 5
