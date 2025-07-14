@@ -2,8 +2,10 @@ import os
 import requests
 import datetime
 import logging
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQueryHandler
+from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQueryHandler, JobQueue
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -14,7 +16,20 @@ API_KEY = os.getenv("API_FOOTBALL_KEY")
 BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {"x-apisports-key": API_KEY}
 
-# --- Function to fetch upcoming matches with stats ---
+# --- Health check server for Render ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'Soccer bot is running')
+
+def run_server():
+    server = HTTPServer(('0.0.0.0', 10000), HealthCheckHandler)
+    server.serve_forever()
+
+threading.Thread(target=run_server).start()
+
+# --- Fetch upcoming matches with stats ---
 def get_upcoming_matches(days=3):
     today = datetime.datetime.now().date()
     matches = []
@@ -28,13 +43,13 @@ def get_upcoming_matches(days=3):
             for match in fixtures:
                 match_id = match["fixture"]["id"]
 
-                # Fetch prediction stats
+                # Predictions
                 stats_url = f"{BASE_URL}/predictions?fixture={match_id}"
                 stats_response = requests.get(stats_url, headers=HEADERS)
                 if stats_response.status_code == 200:
                     match["stats"] = stats_response.json()["response"]
 
-                # Fetch corner stats
+                # Corner stats
                 corner_url = f"{BASE_URL}/fixtures/statistics?fixture={match_id}"
                 corner_response = requests.get(corner_url, headers=HEADERS)
                 if corner_response.status_code == 200:
@@ -57,16 +72,7 @@ def filter_matches(matches, btts_threshold=80, over25_label="Over 2.5"):
             continue
     return filtered
 
-# --- Start Command ---
-def start(update: Update, context: CallbackContext):
-    keyboard = [
-        [InlineKeyboardButton("All Matches", callback_data='all')],
-        [InlineKeyboardButton("Filtered Matches", callback_data='filtered')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text("⚽ Hello! I’m your Soccer Analytics Bot!\nChoose an option:", reply_markup=reply_markup)
-
-# --- Match Display Function ---
+# --- Display matches ---
 def send_match_list(update: Update, matches):
     for match in matches[:29]:
         home = match["teams"]["home"]["name"]
@@ -101,7 +107,16 @@ def send_match_list(update: Update, matches):
 
         update.message.reply_text(msg)
 
-# --- Callback Query Handler ---
+# --- Start Command ---
+def start(update: Update, context: CallbackContext):
+    keyboard = [
+        [InlineKeyboardButton("All Matches", callback_data='all')],
+        [InlineKeyboardButton("Filtered Matches", callback_data='filtered')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text("⚽ Hello! I’m your Soccer Analytics Bot!\nChoose an option:", reply_markup=reply_markup)
+
+# --- Inline Button Logic ---
 def button_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
@@ -113,16 +128,33 @@ def button_handler(update: Update, context: CallbackContext):
     elif query.data == 'filtered':
         filtered = filter_matches(matches)
         if filtered:
-            query.edit_message_text("✅ Showing filtered high-confidence matches...")
+            query.edit_message_text("✅ High-confidence matches...")
             send_match_list(query, filtered)
         else:
             query.edit_message_text("⚠️ No matches meet the filter criteria.")
 
-# --- Run the bot ---
+# --- Daily Auto Alerts ---
+def daily_alert(context: CallbackContext):
+    bot = context.bot
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    matches = get_upcoming_matches()
+    if matches:
+        for match in matches[:10]:
+            home = match["teams"]["home"]["name"]
+            away = match["teams"]["away"]["name"]
+            date = match["fixture"]["date"][:16].replace("T", " ")
+            text = f"📅 {date}: {home} vs {away}"
+            bot.send_message(chat_id=chat_id, text=text)
+
+# --- Launch bot ---
 if __name__ == "__main__":
     updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CallbackQueryHandler(button_handler))
+
+    # Auto send matches every day at 8:00 AM UTC
+    updater.job_queue.run_daily(daily_alert, time=datetime.time(hour=8, minute=0))
+
     updater.start_polling()
     updater.idle()
