@@ -3,7 +3,8 @@ import requests
 import datetime
 import logging
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import Updater, CommandHandler, CallbackContext
+
 
 # Logging
 logging.basicConfig(level=logging.INFO)
